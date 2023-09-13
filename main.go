@@ -3,12 +3,9 @@ package main
 import (
 	"database/sql"
 	"errors"
-	"log"
 	"net/http"
 	"net/smtp"
 	"os"
-
-	"github.com/joho/godotenv"
 
 	"github.com/labstack/echo/v4"
 	_ "github.com/lib/pq"
@@ -53,10 +50,6 @@ func (a *loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
 var auth = LoginAuth(os.Getenv("MAIL_USERNAME"), os.Getenv("MAIL_PASSWORD"))
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
 
 	initDB()
 	e := echo.New()
@@ -64,12 +57,14 @@ func main() {
 		return c.String(http.StatusOK, "Hello, World!")
 	})
 
-	e.Logger.Fatal(e.Start(":8080"))
-
-	//New route path book a slot with data input in form with name, requested slot s.no and roll number
 	e.POST("/book", bookHandler)
 
 	e.POST("/sendOTP", sendOTPHandler)
 	e.POST("/login", loginHandler)
+	e.POST("/status", statusHandler)
+
+	e.Logger.Fatal(e.Start(":8080"))
+
+	//New route path book a slot with data input in form with name, requested slot s.no and roll number
 
 }

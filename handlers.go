@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
@@ -9,7 +10,10 @@ import (
 	"net/smtp"
 	"os"
 	"strconv"
+	"strings"
 	"time"
+
+	"database/sql"
 
 	"github.com/labstack/echo/v4"
 
@@ -43,32 +47,37 @@ func bookHandler(c echo.Context) error {
 	}
 
 	//get the data and check if slot is free by checking if the row is empty
-	rows, err := db.Query("SELECT mailID FROM slots WHERE slot = $1", slot)
+	var bookedBy sql.NullString
+	err = db.QueryRow("SELECT mailID FROM slots WHERE slotno = $1", slot).Scan(&bookedBy)
 	if err != nil {
 		panic(err)
 	}
-	if !rows.Next() {
+	if bookedBy.Valid {
 		return c.NoContent(http.StatusAlreadyReported)
 	}
 
 	//check if it has been a week since student's 2nd last booked slot
-	var lastBooked int
+	var lastBooked sql.NullInt64
 	err = db.QueryRow("SELECT date1 FROM students WHERE mailID = $1", mailID).Scan(&lastBooked)
 	if err != nil {
 		panic(err)
 	}
-	if time.Since(time.Unix(int64(lastBooked), 0)).Hours() > 168 {
+	var lastBookedInt int64 = 0
+	if lastBooked.Valid {
+		lastBookedInt = lastBooked.Int64
+	}
+	if time.Since(time.Unix(lastBookedInt, 0)).Hours() < 168 {
 		return c.NoContent(http.StatusForbidden)
 	}
 
 	//book slot
-	_, err = db.Exec("UPDATE slots SET mailID = $1 WHERE slot = $2", mailID, slot)
+	_, err = db.Exec("UPDATE slots SET mailID = $1 WHERE slotno = $2", mailID, slot)
 
 	if err != nil {
 		panic(err)
 	}
-	//Move date2 to date1 and add todays date to date2
-	_, err = db.Exec("UPDATE students SET date1 = date2, date2 = date1 + 1 WHERE mailID = $1", mailID)
+	//Move date2 to date1 and set date 2 todays
+	_, err = db.Exec("UPDATE students SET date1 = date2, date2 = $1::integer WHERE mailID = $2::text", time.Now().Unix(), mailID)
 	if err != nil {
 		panic(err)
 	}
@@ -78,6 +87,7 @@ func bookHandler(c echo.Context) error {
 
 func sendOTPHandler(c echo.Context) error {
 	mailID := c.FormValue("mailID")
+	mailID = strings.ToLower(mailID)
 	if mailID == "" {
 		return c.NoContent(http.StatusBadRequest)
 	}
@@ -101,6 +111,7 @@ func sendOTPHandler(c echo.Context) error {
 	if err != nil {
 		log.Print(err)
 	}
+	log.Print(otp)
 
 	return c.NoContent(http.StatusOK)
 }
@@ -130,5 +141,35 @@ func loginHandler(c echo.Context) error {
 	}
 	jwt := generateJWT(mailID)
 	return c.String(http.StatusOK, jwt)
+}
+
+// show the entire slots table in json format
+func statusHandler(c echo.Context) error {
+	rows, err := db.Query("SELECT * FROM slots WHERE mailID IS NOT NULL")
+	if err != nil {
+		panic(err)
+	}
+	defer rows.Close()
+	type Entry struct {
+		Slotno int    `json:"slotno"`
+		MailID string `json:"mailID"`
+	}
+
+	var entries []Entry
+
+	for rows.Next() {
+		var slotno int
+		var mailID sql.NullString
+
+		rows.Scan(&slotno, &mailID)
+
+		entries = append(entries, Entry{slotno, mailID.String})
+	}
+	if len(entries) == 0 {
+		return c.NoContent(http.StatusNoContent)
+	}
+	entryBytes, _ := json.MarshalIndent(&entries, "", "  ")
+
+	return c.JSONBlob(http.StatusOK, entryBytes)
 
 }
