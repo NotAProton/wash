@@ -2,19 +2,20 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 )
 
-var key []byte
+var key []byte = []byte(os.Getenv("JWT_SECRET"))
 
 func verifyAuthHeader(c echo.Context) string {
 	token, err := jwt.Parse(c.Request().Header.Get("Authorization"), func(token *jwt.Token) (interface{}, error) {
 		// Don't forget to validate the alg is what you expect:
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 
 		// hmacSampleSecret is a []byte containing your secret, e.g. []byte("my_secret_key")
@@ -33,9 +34,9 @@ func verifyAuthHeader(c echo.Context) string {
 
 }
 
-func generateJWT(rollno string) string {
+func generateJWT(mailID string) string {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub": rollno,
+		"sub": mailID,
 		"nbf": time.Now().Unix(), //not before current time
 		"exp": time.Now().Add(time.Hour * 36).Unix(),
 	})
