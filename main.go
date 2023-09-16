@@ -2,10 +2,11 @@ package main
 
 import (
 	"database/sql"
-	"net/http"
+	"log"
 	"os"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	_ "github.com/lib/pq"
 )
 
@@ -17,21 +18,23 @@ func initDB() {
 	if err != nil {
 		panic(err)
 	}
+	if err := db.Ping(); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func main() {
 
 	initDB()
 	e := echo.New()
-	e.GET("/", func(c echo.Context) error {
-		return c.String(http.StatusOK, "Hello, World!")
-	})
-
 	e.POST("/book", bookHandler)
 
 	e.POST("/changepassword", changePasswordHandler)
 	e.POST("/login", loginHandler)
 	e.POST("/status", statusHandler)
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization},
+	}))
 
 	e.Logger.Fatal(e.Start(":8080"))
 

@@ -78,10 +78,10 @@ func loginHandler(c echo.Context) error {
 	passwordBytes := []byte(password)
 	mailID = strings.ToLower(mailID)
 
-	var passwordInDB []byte
+	var passwordInDB string
 
 	db.QueryRow("SELECT password FROM students WHERE mailID = $1", mailID).Scan(&passwordInDB)
-	err := bcrypt.CompareHashAndPassword(passwordInDB, passwordBytes)
+	err := bcrypt.CompareHashAndPassword([]byte(passwordInDB), passwordBytes)
 	if err != nil {
 		return c.NoContent(http.StatusUnauthorized)
 	}
@@ -100,15 +100,15 @@ func changePasswordHandler(c echo.Context) error {
 	newPasswordBytes := []byte(newPassword)
 	mailID = strings.ToLower(mailID)
 
-	var passwordInDB []byte
+	var passwordInDB string
 
 	db.QueryRow("SELECT password FROM students WHERE mailID = $1", mailID).Scan(&passwordInDB)
-	err := bcrypt.CompareHashAndPassword(passwordInDB, passwordBytes)
+	err := bcrypt.CompareHashAndPassword([]byte(passwordInDB), passwordBytes)
 	if err != nil {
 		return c.NoContent(http.StatusUnauthorized)
 	}
 	newPasswordBytes, _ = bcrypt.GenerateFromPassword(newPasswordBytes, bcrypt.DefaultCost)
-	_, err = db.Exec("UPDATE students SET password = $1 WHERE mailID = $2", newPasswordBytes, mailID)
+	_, err = db.Exec("UPDATE students SET password = $1 WHERE mailID = $2", string(newPasswordBytes[:]), mailID)
 	if err != nil {
 		log.Println(err)
 	}

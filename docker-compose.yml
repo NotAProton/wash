@@ -4,13 +4,13 @@ services:
     build: .
     environment:
       - JWT_SECRET=abc
-      - CONNECTION_STRING=postgres://postgres_user:postgres_password@postgres_db:5432/pgdb?sslmode=disable
+      - CONNECTION_STRING=postgres://postgres_user:postgres_password@db:5432/pgdb?sslmode=disable
     ports:
       - "8080:8080"
     depends_on:
-      - postgres_db
+      - db
 
-  postgres_db:
+  db:
     image: postgres
     environment:
       - POSTGRES_USER=postgres_user
@@ -18,20 +18,14 @@ services:
       - POSTGRES_DB=postgres_db
     volumes:
       - ~/apps/postgres:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
 
   pgadmin:
-    image: dpage/pgadmin4
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=pgadmin4@pgadmin.org
-      - PGADMIN_DEFAULT_PASSWORD=admin
+    image: adminer
+
     ports:
-      - "9000:80"
+      - "9000:8080"
     depends_on:
-      - postgres_db
-    volumes:
-      - my-data:/var/lib/pgadmin
+      - db
 
 volumes:
   my-data:
