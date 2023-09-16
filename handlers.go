@@ -1,14 +1,9 @@
 package main
 
 import (
-	"crypto/rand"
 	"encoding/json"
-	"fmt"
 	"log"
-	"math/big"
 	"net/http"
-	"net/smtp"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -16,29 +11,18 @@ import (
 	"database/sql"
 
 	"github.com/labstack/echo/v4"
+	"golang.org/x/crypto/bcrypt"
 
 	_ "github.com/lib/pq"
 )
-
-func genRandNum(min, max int64) int64 {
-	// calculate the max we will be using
-	bg := big.NewInt(max - min)
-
-	// get big.Int between 0 and bg
-	// in this case 0 to 20
-	n, err := rand.Int(rand.Reader, bg)
-	if err != nil {
-		panic(err)
-	}
-
-	// add n to min to support the passed in range
-	return n.Int64() + min
-}
 
 func bookHandler(c echo.Context) error {
 	mailID := verifyAuthHeader(c)
 	if mailID == "" {
 		return c.NoContent(http.StatusUnauthorized)
+	}
+	if !isSafe(c.FormValue("slot")) {
+		return c.NoContent(http.StatusBadRequest)
 	}
 
 	slot, err := strconv.Atoi(c.FormValue("slot"))
@@ -85,62 +69,50 @@ func bookHandler(c echo.Context) error {
 	return c.String(http.StatusOK, "Booked")
 }
 
-func sendOTPHandler(c echo.Context) error {
-	mailID := c.FormValue("mailID")
-	mailID = strings.ToLower(mailID)
-	if mailID == "" {
-		return c.NoContent(http.StatusBadRequest)
-	}
-	//check if mailID exists
-	row, err := db.Query("SELECT mailID FROM students WHERE mailID = $1", mailID)
-	if err != nil {
-		panic(err)
-	}
-	if !row.Next() {
-		return c.NoContent(http.StatusUnauthorized)
-	}
-	//generate and send OTP to mail
-	otp := generateOTP(mailID)
-
-	to := []string{mailID + "@" + os.Getenv("MAIL_TO_DOMAIN")}
-	msg := []byte(
-		"Subject: OTP for Booking Washing Machine Slot\r\n" +
-			"\r\n" +
-			"Your OTP is " + otp + "\n")
-	err = smtp.SendMail(os.Getenv("SMTP_HOST"), auth, os.Getenv("MAIL_ID"), to, msg)
-	if err != nil {
-		log.Print(err)
-	}
-	log.Print(otp)
-
-	return c.NoContent(http.StatusOK)
-}
-
-func generateOTP(mailID string) string {
-	o := genRandNum(1000, 9999)
-	//update in database
-	_, err := db.Exec("UPDATE students SET otp = $1 WHERE mailID = $2", fmt.Sprint(o), mailID)
-	if err != nil {
-		panic(err)
-	}
-	return fmt.Sprint(o)
-
-}
-
 func loginHandler(c echo.Context) error {
 	mailID := c.FormValue("mailID")
-	otp := c.FormValue("otp")
-	if mailID == "" || otp == "" {
+	password := c.FormValue("password")
+	if !isSafe(mailID, password) {
 		return c.NoContent(http.StatusBadRequest)
 	}
-	var otpInDB string
-	//check otp in database
-	db.QueryRow("SELECT otp FROM students WHERE mailID = $1", mailID).Scan(&otpInDB)
-	if otp != otpInDB {
+	passwordBytes := []byte(password)
+	mailID = strings.ToLower(mailID)
+
+	var passwordInDB []byte
+
+	db.QueryRow("SELECT password FROM students WHERE mailID = $1", mailID).Scan(&passwordInDB)
+	err := bcrypt.CompareHashAndPassword(passwordInDB, passwordBytes)
+	if err != nil {
 		return c.NoContent(http.StatusUnauthorized)
 	}
 	jwt := generateJWT(mailID)
 	return c.String(http.StatusOK, jwt)
+}
+
+func changePasswordHandler(c echo.Context) error {
+	mailID := c.FormValue("mailID")
+	password := c.FormValue("password")
+	newPassword := c.FormValue("newPassword")
+	if !isSafe(mailID, password, newPassword) {
+		return c.NoContent(http.StatusBadRequest)
+	}
+	passwordBytes := []byte(password)
+	newPasswordBytes := []byte(newPassword)
+	mailID = strings.ToLower(mailID)
+
+	var passwordInDB []byte
+
+	db.QueryRow("SELECT password FROM students WHERE mailID = $1", mailID).Scan(&passwordInDB)
+	err := bcrypt.CompareHashAndPassword(passwordInDB, passwordBytes)
+	if err != nil {
+		return c.NoContent(http.StatusUnauthorized)
+	}
+	newPasswordBytes, _ = bcrypt.GenerateFromPassword(newPasswordBytes, bcrypt.DefaultCost)
+	_, err = db.Exec("UPDATE students SET password = $1 WHERE mailID = $2", newPasswordBytes, mailID)
+	if err != nil {
+		log.Println(err)
+	}
+	return c.NoContent(http.StatusOK)
 }
 
 // show the entire slots table in json format
@@ -172,4 +144,18 @@ func statusHandler(c echo.Context) error {
 
 	return c.JSONBlob(http.StatusOK, entryBytes)
 
+}
+
+func isSafe(args ...string) bool {
+	for _, arg := range args {
+		if len(arg) > 25 || len(arg) < 1 {
+			return false
+		}
+		for _, ch := range arg {
+			if ch < ' ' || ch > '~' {
+				return false
+			}
+		}
+	}
+	return true
 }

@@ -2,9 +2,7 @@ package main
 
 import (
 	"database/sql"
-	"errors"
 	"net/http"
-	"net/smtp"
 	"os"
 
 	"github.com/labstack/echo/v4"
@@ -21,34 +19,6 @@ func initDB() {
 	}
 }
 
-type loginAuth struct {
-	username, password string
-}
-
-func LoginAuth(username, password string) smtp.Auth {
-	return &loginAuth{username, password}
-}
-
-func (a *loginAuth) Start(server *smtp.ServerInfo) (string, []byte, error) {
-	return "LOGIN", []byte{}, nil
-}
-
-func (a *loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
-	if more {
-		switch string(fromServer) {
-		case "Username:":
-			return []byte(a.username), nil
-		case "Password:":
-			return []byte(a.password), nil
-		default:
-			return nil, errors.New("unkown fromServer")
-		}
-	}
-	return nil, nil
-}
-
-var auth = LoginAuth(os.Getenv("MAIL_USERNAME"), os.Getenv("MAIL_PASSWORD"))
-
 func main() {
 
 	initDB()
@@ -59,7 +29,7 @@ func main() {
 
 	e.POST("/book", bookHandler)
 
-	e.POST("/sendOTP", sendOTPHandler)
+	e.POST("/changepassword", changePasswordHandler)
 	e.POST("/login", loginHandler)
 	e.POST("/status", statusHandler)
 

@@ -4,11 +4,6 @@ services:
     build: .
     environment:
       - JWT_SECRET=abc
-      - SMTP_HOST=example.com
-      - MAIL_ID=abc@example.com
-      - MAIL_USERNAME=abc
-      - MAIL_PASSWORD=def
-      - MAIL_TO_DOMAIN=example.com
       - CONNECTION_STRING=postgres://postgres_user:postgres_password@postgres_db:5432/pgdb?sslmode=disable
     ports:
       - "8080:8080"

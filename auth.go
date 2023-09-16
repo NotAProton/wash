@@ -12,6 +12,9 @@ import (
 var key []byte = []byte(os.Getenv("JWT_SECRET"))
 
 func verifyAuthHeader(c echo.Context) string {
+	if c.Request().Header.Get("Authorization") == "" {
+		return ""
+	}
 	token, err := jwt.Parse(c.Request().Header.Get("Authorization"), func(token *jwt.Token) (interface{}, error) {
 		// Don't forget to validate the alg is what you expect:
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
