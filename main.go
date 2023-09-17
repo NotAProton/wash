@@ -36,6 +36,8 @@ func main() {
 		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization},
 	}))
 
+	e.Use(middleware.Logger())
+
 	e.Logger.Fatal(e.Start(":8080"))
 
 	//New route path book a slot with data input in form with name, requested slot s.no and roll number
