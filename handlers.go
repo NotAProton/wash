@@ -26,7 +26,7 @@ func bookHandler(c echo.Context) error {
 	}
 
 	slot, err := strconv.Atoi(c.FormValue("slot"))
-	if err != nil || slot < 1 || slot > 42 {
+	if err != nil || slot < 1 || slot > 46 {
 		return c.NoContent(http.StatusBadRequest)
 	}
 
