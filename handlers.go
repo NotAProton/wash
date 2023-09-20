@@ -16,6 +16,29 @@ import (
 	_ "github.com/lib/pq"
 )
 
+// set timezone,
+var loc, _ = time.LoadLocation("Asia/Kolkata")
+
+func loginHandler(c echo.Context) error {
+	mailID := c.FormValue("mailID")
+	password := c.FormValue("password")
+	if !isSafe(mailID, password) {
+		return c.NoContent(http.StatusBadRequest)
+	}
+	passwordBytes := []byte(password)
+	mailID = strings.ToLower(mailID)
+
+	var passwordInDB string
+
+	db.QueryRow("SELECT password FROM students WHERE mailID = $1", mailID).Scan(&passwordInDB)
+	err := bcrypt.CompareHashAndPassword([]byte(passwordInDB), passwordBytes)
+	if err != nil {
+		return c.NoContent(http.StatusUnauthorized)
+	}
+	jwt := generateJWT(mailID)
+	return c.String(http.StatusOK, jwt)
+}
+
 func bookHandler(c echo.Context) error {
 	mailID := verifyAuthHeader(c)
 	if mailID == "" {
@@ -69,26 +92,65 @@ func bookHandler(c echo.Context) error {
 	return c.String(http.StatusOK, "Booked")
 }
 
-func loginHandler(c echo.Context) error {
-	mailID := c.FormValue("mailID")
-	password := c.FormValue("password")
-	if !isSafe(mailID, password) {
-		return c.NoContent(http.StatusBadRequest)
-	}
-	passwordBytes := []byte(password)
-	mailID = strings.ToLower(mailID)
-
-	var passwordInDB string
-
-	db.QueryRow("SELECT password FROM students WHERE mailID = $1", mailID).Scan(&passwordInDB)
-	err := bcrypt.CompareHashAndPassword([]byte(passwordInDB), passwordBytes)
-	if err != nil {
+func cancelHandler(c echo.Context) error {
+	mailID := verifyAuthHeader(c)
+	if mailID == "" {
 		return c.NoContent(http.StatusUnauthorized)
 	}
-	jwt := generateJWT(mailID)
-	return c.String(http.StatusOK, jwt)
-}
+	if !isSafe(c.FormValue("slot")) {
+		return c.NoContent(http.StatusBadRequest)
+	}
 
+	slot, err := strconv.Atoi(c.FormValue("slot"))
+	if err != nil || slot < 1 || slot > 46 {
+		return c.NoContent(http.StatusBadRequest)
+	}
+
+	//get the data and check if slot is booked by mailID
+	var bookedBy sql.NullString
+	err = db.QueryRow("SELECT mailID FROM slots WHERE slotno = $1", slot).Scan(&bookedBy)
+	if err != nil {
+		panic(err)
+	}
+	if !bookedBy.Valid || bookedBy.String != mailID {
+		return c.NoContent(http.StatusForbidden)
+	}
+
+	//check if the cancellation is on the same day
+	if time.Now().In(loc).Weekday().String() == getDayFromSlotNo(slot) {
+		if getSlotStartHour(slot)-time.Now().In(loc).Hour() < 4 {
+			return c.String(http.StatusForbidden, "Cannot cancel now")
+		}
+
+	}
+
+	//cancel slot
+	_, err = db.Exec("UPDATE slots SET mailID = NULL WHERE slotno = $1", slot)
+
+	if err != nil {
+		panic(err)
+	}
+
+	//if date1 is null set date 2 to null
+	var date1 sql.NullInt64
+	err = db.QueryRow("SELECT date1 FROM students WHERE mailID = $1", mailID).Scan(&date1)
+	if err != nil {
+		panic(err)
+	}
+	if !date1.Valid {
+		_, err = db.Exec("UPDATE students SET date2 = NULL WHERE mailID = $1::text", mailID)
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		_, err = db.Exec("UPDATE students SET date1 = NULL WHERE mailID = $1::text", mailID)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	return c.String(http.StatusOK, "Slot cancelled")
+}
 func changePasswordHandler(c echo.Context) error {
 	mailID := c.FormValue("mailID")
 	password := c.FormValue("password")

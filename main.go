@@ -32,6 +32,7 @@ func main() {
 	e.POST("/changepassword", changePasswordHandler)
 	e.POST("/login", loginHandler)
 	e.POST("/status", statusHandler)
+	e.POST("/cancel", cancelHandler)
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization},
 	}))
