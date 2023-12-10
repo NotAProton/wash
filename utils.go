@@ -20,7 +20,7 @@ func getDayFromSlotNo(slotNo int) string {
 }
 
 func getSlotStartHour(slotno int) int {
-	if slotno < 30 {
+	if slotno <= 30 {
 		slotno = slotno % 6
 		switch slotno {
 		case 1:
